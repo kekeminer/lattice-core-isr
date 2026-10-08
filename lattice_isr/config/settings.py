@@ -65,9 +65,10 @@ class SystemSettings(BaseSettings):
     # Motor de Detección e Inferencia Neuronal (YOLOv8 & Respaldo Térmico)
     YOLO_ENABLED: bool = Field(default=True, description="Habilitar inferencia por red neuronal YOLOv8")
     YOLO_MODEL_NAME: str = Field(default="yolov8n.pt", description="Modelo YOLOv8 preentrenado (yolov8n.pt, yolov8s.pt o export ONNX)")
-    YOLO_CONFIDENCE_THRESHOLD: float = Field(default=0.40, ge=0.05, le=0.99, description="Umbral mínimo de confianza de clasificación")
+    YOLO_CONFIDENCE_THRESHOLD: float = Field(default=0.45, ge=0.05, le=0.99, description="Umbral mínimo de confianza de clasificación")
+    YOLO_IOU_THRESHOLD: float = Field(default=0.45, ge=0.05, le=0.99, description="Umbral de Supresión de No Máximos (IoU)")
     YOLO_TARGET_CLASSES: List[str] = Field(
-        default=["person", "car", "truck", "bus", "motorcycle", "bicycle", "backpack", "handbag", "tv", "laptop", "chair"],
+        default=["person", "car", "truck", "bus", "motorcycle", "bicycle", "backpack", "handbag", "tv", "laptop", "chair", "bottle", "cup"],
         description="Clases tácticas a detectar e identificar por la red neuronal"
     )
 

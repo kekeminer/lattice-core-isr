@@ -4,6 +4,7 @@ Ingesta asíncrona mediante hilo desacoplado, gestión estricta del ciclo de vid
 OpenCV para cumplir el límite de memoria (< 100 MB RAM), y reconexión autónoma con Exponential Backoff.
 """
 
+import os
 import time
 import queue
 import threading
@@ -11,6 +12,9 @@ from typing import Optional, Tuple
 import cv2
 import numpy as np
 from loguru import logger
+
+# Configuración de latencia cero para el backend FFmpeg de OpenCV (elimina buffers TCP/RTSP)
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "fflags;nobuffer|max_delay;0|rtsp_transport;udp"
 
 from lattice_isr.config.settings import SystemSettings
 from lattice_isr.core.security import StreamSecurityValidator, SecurityBaseException
@@ -193,22 +197,25 @@ class AsyncStreamLoader:
                 last_active_time = time.monotonic()
 
                 while not self._stop_event.is_set():
-                    ret, frame = cap.read()
+                    # Purga de Sockets de Red (Zero-Latency Network Draining):
+                    # cap.grab() consume el paquete sin decodificar para vaciar cuadros obsoletos
+                    # retenidos en el buffer TCP y entregar estrictamente el frame actual
+                    grabbed = cap.grab()
                     now = time.monotonic()
 
-                    if not ret or frame is None:
+                    if not grabbed:
                         # Si es un micro-corte temporal menor al timeout, reintentar silenciosamente sin reiniciar socket
                         if now - last_active_time > self._settings.STREAM_TIMEOUT_SECONDS:
                             raise StreamConnectionError(
                                 f"Inactividad de socket superior a {self._settings.STREAM_TIMEOUT_SECONDS}s."
                             )
-                        time.sleep(0.015)
+                        time.sleep(0.005)
                         continue
 
                     last_active_time = now
 
                     # Vaciado agresivo de buffer (Zero-Latency Frame Dropping)
-                    # Si el buffer contiene más de 1 fotograma acumulado o está lleno, descarta los cuadros anteriores
+                    # Si el buffer contiene fotogramas acumulados, descarta los cuadros anteriores
                     while self._buffer.qsize() >= 1:
                         try:
                             old_frame = self._buffer.get_nowait()
@@ -217,6 +224,11 @@ class AsyncStreamLoader:
                                 self._dropped_frames += 1
                         except queue.Empty:
                             break
+
+                    # Decodificar únicamente el frame más reciente
+                    ret, frame = cap.retrieve()
+                    if not ret or frame is None:
+                        continue
 
                     self._buffer.put_nowait(frame)
 

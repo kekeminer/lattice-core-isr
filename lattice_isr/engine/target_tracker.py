@@ -33,6 +33,7 @@ class TargetTrackerManager:
         self._next_target_numeric_id = 1
         self._tracked_targets: Dict[str, TrackedTargetState] = {}
         self._trajectories: Dict[str, deque] = {}
+        self._target_history: Dict[str, TrackedTargetState] = {}
 
     @property
     def active_targets_count(self) -> int:
@@ -145,6 +146,9 @@ class TargetTrackerManager:
             else:
                 target.last_seen_timestamp = frame_timestamp
 
+            # Mantener sincronizado el historial persistente para evitar parpadeos
+            self._target_history[tid] = target.model_copy()
+
         return list(self._tracked_targets.values())
 
     def _register_new_target(self, detection: TargetDetection, timestamp: float) -> None:
@@ -178,6 +182,7 @@ class TargetTrackerManager:
         )
 
         self._tracked_targets[tid] = new_state
+        self._target_history[tid] = new_state.model_copy()
         logger.info(f"[TRACKER] Nuevo objetivo táctico fijado: {tid} ({new_state.class_name}) en ({detection.centroid_x}, {detection.centroid_y})")
 
     def _update_existing_target(
@@ -226,16 +231,46 @@ class TargetTrackerManager:
         self._trajectories[target_id].append((detection.centroid_x, detection.centroid_y))
         target.trajectory = list(self._trajectories[target_id])
 
+        # Actualizar copia en historial persistente
+        self._target_history[target_id] = target.model_copy()
+
+    def get_target(self, target_id: str) -> Optional[TrackedTargetState]:
+        """Obtiene un objetivo por su ID desde los activos o desde el historial persistente."""
+        if target_id in self._tracked_targets:
+            return self._tracked_targets[target_id]
+        return self._target_history.get(target_id)
+
+    def get_all_known_targets(self) -> List[TrackedTargetState]:
+        """
+        Retorna la lista de objetivos conocidos: primero los activos y luego los retenidos
+        en el historial persistente (sin duplicados) para interacción fluida en panel.
+        """
+        seen = set()
+        result: List[TrackedTargetState] = []
+        for t in self._tracked_targets.values():
+            result.append(t)
+            seen.add(t.target_id)
+        for tid, t in self._target_history.items():
+            if tid not in seen:
+                result.append(t)
+                seen.add(tid)
+        return result
+
+    def get_target_history(self) -> Dict[str, TrackedTargetState]:
+        """Retorna el diccionario de historial persistente de objetivos."""
+        return dict(self._target_history)
+
     def _deregister_target(self, target_id: str) -> None:
-        """Elimina de forma segura un objetivo para liberar memoria operativa."""
+        """Elimina de forma segura un objetivo de los activos para liberar tracking."""
         if target_id in self._tracked_targets:
             del self._tracked_targets[target_id]
         if target_id in self._trajectories:
             del self._trajectories[target_id]
-        logger.debug(f"[TRACKER] Objetivo {target_id} purgado por inactividad prolongada.")
+        logger.debug(f"[TRACKER] Objetivo {target_id} purgado de tracking activo (retenido en historial).")
 
     def reset(self) -> None:
         """Reinicia el tracking y libera todas las colecciones."""
         self._tracked_targets.clear()
         self._trajectories.clear()
+        self._target_history.clear()
         self._next_target_numeric_id = 1

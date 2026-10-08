@@ -36,7 +36,7 @@ class DetectionProcessingError(Exception):
 # Conjuntos inmutables O(1) para filtrado y categorización de amenazas tácticas
 CRITICAL_THREAT_CLASSES: frozenset = frozenset({"car", "truck", "bus"})
 HIGH_THREAT_CLASSES: frozenset = frozenset({"person", "motorcycle"})
-MEDIUM_THREAT_CLASSES: frozenset = frozenset({"bicycle", "backpack", "handbag", "tv", "laptop", "chair"})
+MEDIUM_THREAT_CLASSES: frozenset = frozenset({"bicycle", "backpack", "handbag", "tv", "laptop", "chair", "bottle", "cup"})
 CARDINAL_DIRECTIONS: Tuple[str, ...] = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
 
 
@@ -112,7 +112,7 @@ def extract_dominant_color_hsv(roi: Optional[np.ndarray], class_name: str = "tar
             return f"Persona - Vestimenta: {color_summary}"
         elif cls_lower in ("car", "truck", "bus", "motorcycle", "bicycle"):
             return f"Vehículo - Carrocería: {color_summary}"
-        elif cls_lower in ("tv", "laptop", "chair", "backpack"):
+        elif cls_lower in ("tv", "laptop", "chair", "backpack", "bottle", "cup"):
             return f"{class_name.capitalize()} - Superficie: {color_summary}"
         else:
             return f"{class_name.capitalize()} - Tono: {color_summary}"
@@ -153,9 +153,10 @@ class ThermalObjectDetector:
         self._target_classes = set(getattr(
             settings,
             "YOLO_TARGET_CLASSES",
-            ["person", "car", "truck", "bus", "motorcycle", "bicycle", "backpack", "handbag", "tv", "laptop", "chair"]
+            ["person", "car", "truck", "bus", "motorcycle", "bicycle", "backpack", "handbag", "tv", "laptop", "chair", "bottle", "cup"]
         ))
-        self._confidence_threshold = getattr(settings, "YOLO_CONFIDENCE_THRESHOLD", 0.40)
+        self._confidence_threshold = getattr(settings, "YOLO_CONFIDENCE_THRESHOLD", 0.45)
+        self._iou_threshold = getattr(settings, "YOLO_IOU_THRESHOLD", 0.45)
 
         # Dimensiones de inferencia Stride 32
         inf_h = getattr(settings, "INFERENCE_HEIGHT", 384)
@@ -322,6 +323,7 @@ class ThermalObjectDetector:
         results = self._yolo_model(
             frame_bgr,
             conf=self._confidence_threshold,
+            iou=self._iou_threshold,
             verbose=False,
             imgsz=self._inference_imgsz
         )
@@ -530,7 +532,8 @@ class ThermalObjectDetector:
         sector_inventory: Optional[SectorInventory] = None,
         raw_sensor_frame: Optional[np.ndarray] = None,
         focused_target_id: Optional[str] = None,
-        attach_side_panel: bool = True
+        attach_side_panel: bool = True,
+        target_history: Optional[Dict[str, Any]] = None
     ) -> np.ndarray:
         """
         Renderiza el Heads-Up Display (HUD) militar monocromático con clasificación semántica YOLOv8:
@@ -579,8 +582,9 @@ class ThermalObjectDetector:
             beh = behaviors.get(trg.target_id)
             intent_str = beh.intent if beh else "TRANSITING"
 
-            target_color = COLOR_WHITE_BRIGHT if (is_breach or trg.threat_level == "CRITICAL") else COLOR_PLATINUM
-            line_thickness = 2 if (is_breach or trg.threat_level in ("HIGH", "CRITICAL")) else 1
+            is_locked = (focused_target_id is not None and trg.target_id == focused_target_id)
+            target_color = COLOR_WHITE_BRIGHT if (is_locked or is_breach or trg.threat_level == "CRITICAL") else COLOR_PLATINUM
+            line_thickness = 2 if (is_locked or is_breach or trg.threat_level in ("HIGH", "CRITICAL")) else 1
 
             # 3.1 Trayectoria histórica
             if hasattr(trg, "trajectory") and len(trg.trajectory) > 1:
@@ -597,6 +601,9 @@ class ThermalObjectDetector:
             cv2.line(hud, (x, y + h), (x, y + h - line_len), target_color, line_thickness)
             cv2.line(hud, (x + w, y + h), (x + w - line_len, y + h), target_color, line_thickness)
             cv2.line(hud, (x + w, y + h), (x + w, y + h - line_len), target_color, line_thickness)
+
+            if is_locked:
+                cv2.rectangle(hud, (x - 2, y - 2), (x + w + 2, y + h + 2), COLOR_WHITE_BRIGHT, 1)
 
             # 3.3 Marcador de centroide
             cv2.drawMarker(hud, (cx, cy), target_color, markerType=cv2.MARKER_CROSS, markerSize=8, thickness=1)
@@ -616,10 +623,11 @@ class ThermalObjectDetector:
 
             panel_y = max(68, y - 8)
             breach_tag = "[PERIMETER BREACH] " if is_breach else ""
+            lock_prefix = "[LOCKED] " if is_locked else ""
 
             class_label = getattr(trg, "class_name", "TARGET").upper()
             conf_val = int(getattr(trg, "confidence", 1.0) * 100)
-            tag_line1 = f"{breach_tag}{class_label} {conf_val}% | {trg.target_id} [{trg.threat_level}]"
+            tag_line1 = f"{lock_prefix}{breach_tag}{class_label} {conf_val}% | {trg.target_id} [{trg.threat_level}]"
             tag_line2 = f"GPS: {geo_lat_str}, {geo_lon_str} | HDG: {trg.heading_deg:.0f}° | {trg.velocity_px_s:.0f}px/s | {intent_str}"
 
             panel_w = max(280, len(tag_line2) * 7 + 14)
@@ -678,15 +686,23 @@ class ThermalObjectDetector:
             cv2.LINE_AA
         )
 
-        # 5.2 Determinación del Objetivo Enfocado
+        # 5.2 Determinación del Objetivo Enfocado y Persistencia
         target_focus = None
-        if tracked_targets:
-            if focused_target_id:
+        is_frozen = False
+
+        if focused_target_id:
+            if tracked_targets:
                 for t in tracked_targets:
                     if t.target_id == focused_target_id:
                         target_focus = t
                         break
-            if target_focus is None:
+            if target_focus is None and target_history:
+                target_focus = target_history.get(focused_target_id)
+                if target_focus is not None:
+                    is_frozen = True
+
+        if target_focus is None:
+            if tracked_targets:
                 # Priorizar objetivos con BREACH o mayor amenaza
                 criticals = [t for t in tracked_targets if t.threat_level == "CRITICAL"]
                 highs = [t for t in tracked_targets if t.threat_level == "HIGH"]
@@ -696,6 +712,10 @@ class ThermalObjectDetector:
                     target_focus = highs[0]
                 else:
                     target_focus = tracked_targets[0]
+            elif target_history and len(target_history) > 0:
+                # Persistencia en Panel: mantener última entidad conocida si la cámara se mueve
+                target_focus = list(target_history.values())[-1]
+                is_frozen = True
 
         curr_y = 62
 
@@ -703,13 +723,15 @@ class ThermalObjectDetector:
             trg_id = target_focus.target_id
             cls_name = getattr(target_focus, "class_name", "TARGET").upper()
             conf_pct = int(getattr(target_focus, "confidence", 1.0) * 100)
-            gf = geofence_statuses.get(trg_id)
+            gf = geofence_statuses.get(trg_id) if geofence_statuses else None
             is_breach = gf.is_breaching if gf else False
-            beh = behaviors.get(trg_id)
-            geo = geo_positions.get(trg_id)
+            beh = behaviors.get(trg_id) if behaviors else None
+            geo = geo_positions.get(trg_id) if geo_positions else None
 
             # Tarjeta de Identificación
-            cv2.putText(composite, f"TARGET LOCK: {trg_id}", (px_start + 14, curr_y), cv2.FONT_HERSHEY_SIMPLEX, 0.42, COLOR_WHITE_BRIGHT, 1, cv2.LINE_AA)
+            lock_str = " [LOCKED]" if (focused_target_id and trg_id == focused_target_id) else ""
+            frozen_str = " (OFF-FRAME)" if is_frozen else ""
+            cv2.putText(composite, f"TARGET: {trg_id}{lock_str}{frozen_str}", (px_start + 14, curr_y), cv2.FONT_HERSHEY_SIMPLEX, 0.40, COLOR_WHITE_BRIGHT, 1, cv2.LINE_AA)
             curr_y += 18
             cv2.putText(composite, f"CLASS: {cls_name} ({conf_pct}%)", (px_start + 14, curr_y), cv2.FONT_HERSHEY_SIMPLEX, 0.38, COLOR_PLATINUM, 1, cv2.LINE_AA)
             curr_y += 18
@@ -721,9 +743,11 @@ class ThermalObjectDetector:
             now_t = time.monotonic()
             cache = cls._INSPECTOR_CACHE
             need_refresh = (
-                cache["target_id"] != target_focus.target_id
-                or (now_t - cache["last_analysis_time"]) >= 1.0
-                or cache["thumbnail"] is None
+                not is_frozen and (
+                    cache["target_id"] != target_focus.target_id
+                    or (now_t - cache["last_analysis_time"]) >= 1.0
+                    or cache["thumbnail"] is None
+                )
             )
 
             if need_refresh:
@@ -744,8 +768,8 @@ class ThermalObjectDetector:
                 cache["target_id"] = target_focus.target_id
                 cache["last_analysis_time"] = now_t
 
-            dominant_attr_str = cache["dominant_attr_str"]
-            thumb = cache["thumbnail"]
+            dominant_attr_str = cache.get("dominant_attr_str", "Indeterminado")
+            thumb = cache.get("thumbnail")
 
             if thumb is not None:
                 thumb_w, thumb_h = 100, 75
@@ -755,9 +779,18 @@ class ThermalObjectDetector:
                 cv2.rectangle(composite, (px_start + 14, curr_y), (px_start + 14 + thumb_w, curr_y + thumb_h), COLOR_BORDER_GREY, 1)
 
                 # Estado de Alerta destacado al costado de la miniatura
-                alert_text = "STATUS: BREACH" if is_breach else "STATUS: SAFE"
-                alert_bg = COLOR_WHITE_BRIGHT if is_breach else COLOR_BLACK
-                alert_fg = COLOR_BLACK if is_breach else COLOR_PLATINUM
+                if is_frozen:
+                    alert_text = "STATUS: FROZEN"
+                    alert_bg = COLOR_BLACK
+                    alert_fg = COLOR_PLATINUM
+                elif is_breach:
+                    alert_text = "STATUS: BREACH"
+                    alert_bg = COLOR_WHITE_BRIGHT
+                    alert_fg = COLOR_BLACK
+                else:
+                    alert_text = "STATUS: SAFE"
+                    alert_bg = COLOR_BLACK
+                    alert_fg = COLOR_PLATINUM
 
                 cv2.rectangle(composite, (px_start + 126, curr_y + 12), (px_start + 286, curr_y + 40), alert_bg, -1)
                 cv2.rectangle(composite, (px_start + 126, curr_y + 12), (px_start + 286, curr_y + 40), COLOR_BORDER_GREY, 1)
@@ -819,6 +852,23 @@ class ThermalObjectDetector:
             cv2.putText(composite, "SCANNING SECTOR...", (px_start + 14, curr_y), cv2.FONT_HERSHEY_SIMPLEX, 0.36, COLOR_TEXT_DIM, 1, cv2.LINE_AA)
             curr_y += 30
             cv2.line(composite, (px_start + 14, curr_y), (px_start + PANEL_WIDTH - 14, curr_y), COLOR_BORDER_GREY, 1)
+
+        # Roster interactivo de objetivos conocidos (Persistencia y Selección 1-9 / TAB / Click)
+        known_roster: List[Any] = list(tracked_targets)
+        if target_history:
+            for hid, htrg in target_history.items():
+                if all(t.target_id != hid for t in known_roster):
+                    known_roster.append(htrg)
+
+        if known_roster:
+            cv2.putText(composite, "▲ ROSTER [KEY 1-9 / TAB / CLICK]", (px_start + 14, curr_y), cv2.FONT_HERSHEY_SIMPLEX, 0.32, COLOR_TEXT_DIM, 1, cv2.LINE_AA)
+            curr_y += 15
+            roster_items = []
+            for idx, r_trg in enumerate(known_roster[:5], start=1):
+                marker = "*" if (focused_target_id == r_trg.target_id) else ""
+                roster_items.append(f"[{idx}]{marker}{r_trg.target_id[-3:]}")
+            cv2.putText(composite, " ".join(roster_items), (px_start + 14, curr_y), cv2.FONT_HERSHEY_SIMPLEX, 0.34, COLOR_PLATINUM, 1, cv2.LINE_AA)
+            curr_y += 20
 
         # 5.3 Ficha Inferior de Inventario Táctico del Sector y Cobertura (m²)
         box_y = max(curr_y + 10, height - 120)

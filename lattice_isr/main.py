@@ -127,23 +127,88 @@ def run_orchestrator(stream_override: Optional[str] = None) -> None:
     # Iniciar inferencia neuronal asíncrona para garantizar 60 FPS ininterrumpidos
     object_detector.start_async_worker()
 
-    logger.info("[COMMAND] Modo Activo: COLOR RGB PRINCIPAL (60 FPS + ASYNC YOLO + SIDE INSPECTOR). Controles: [D] Modo de Vista | [B] Paleta Térmica | [S] Snapshot | [Q] Salir")
+    # Estado interactivo de Selección y Bloqueo de Objetivos (Target Lock)
+    locked_target_id: Optional[str] = None
+
+    def on_mouse_event(event: int, x: int, y: int, flags: int, param: Any) -> None:
+        """Callback de mouse para seleccionar o desbloquear objetivos tácticos."""
+        nonlocal locked_target_id
+        if event == cv2.EVENT_LBUTTONDOWN:
+            # Si se hace clic en el área de video principal
+            if x < settings.FRAME_WIDTH:
+                # Buscar si el clic cae dentro de una bounding box de un objetivo activo o el más cercano
+                all_targets = target_tracker.get_all_known_targets()
+                clicked_target = None
+                min_dist = float("inf")
+                for trg in all_targets:
+                    x1 = trg.bbox_x
+                    y1 = trg.bbox_y
+                    x2 = trg.bbox_x + trg.bbox_w
+                    y2 = trg.bbox_y + trg.bbox_h
+                    if x1 <= x <= x2 and y1 <= y <= y2:
+                        clicked_target = trg.target_id
+                        break
+                    # Medir distancia al centroide
+                    dist = ((x - trg.centroid_x) ** 2 + (y - trg.centroid_y) ** 2) ** 0.5
+                    if dist < min_dist and dist < 120:  # Radio de tolerancia 120px
+                        min_dist = dist
+                        clicked_target = trg.target_id
+
+                if clicked_target:
+                    locked_target_id = clicked_target
+                    logger.info(f"[TARGET-LOCK] Objetivo fijado manualmente (Click): {locked_target_id}")
+                else:
+                    # Clic en vacío deselecciona
+                    locked_target_id = None
+                    logger.info("[TARGET-LOCK] Bloqueo liberado (Click en espacio libre).")
+            else:
+                # Clic en el panel lateral: ciclar selección
+                roster = target_tracker.get_all_known_targets()
+                if roster:
+                    idx = 0
+                    if locked_target_id:
+                        ids = [t.target_id for t in roster]
+                        if locked_target_id in ids:
+                            idx = (ids.index(locked_target_id) + 1) % len(ids)
+                    locked_target_id = roster[idx].target_id
+                    logger.info(f"[TARGET-LOCK] Objetivo ciclado desde panel: {locked_target_id}")
+
+        elif event == cv2.EVENT_RBUTTONDOWN:
+            locked_target_id = None
+            logger.info("[TARGET-LOCK] Bloqueo liberado (Click derecho).")
+
+    cv2.setMouseCallback(window_name, on_mouse_event)
+
+    logger.info("[COMMAND] Modo Activo: COLOR RGB PRINCIPAL (60 FPS + ASYNC YOLO + SIDE INSPECTOR).")
+    logger.info("[COMMAND] Controles: [1-9] Seleccionar Target | [TAB] Alternar Target | [0/U] Desbloquear | [Click] Lock/Unlock")
+    logger.info("[COMMAND] Atajos: [D] Modo de Vista | [B] Paleta Térmica | [S] Snapshot | [Q] Salir")
 
     frame_counter = 0
     inference_cadence = getattr(settings, "INFERENCE_CADENCE", 3)
     tracked_targets: list = []
+    active_frame: Optional[np.ndarray] = None
+    target_frame_interval = 1.0 / 60.0  # Exactamente 16.66ms para 60 FPS sostenidos
 
     try:
         while True:
-            has_frame, raw_frame = stream_loader.read(timeout=0.01)
+            loop_start = time.perf_counter()
+            has_new_frame, raw_frame = stream_loader.read(timeout=0.002)
 
             now_mono = time.monotonic()
             timestamp_id = datetime.now().strftime("%Y%m%d-%H%M%S")
             iso_now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
-            if not has_frame or raw_frame is None:
-                waiting_canvas = np.zeros((settings.FRAME_HEIGHT, settings.FRAME_WIDTH, 3), dtype=np.uint8)
-                status_msg = "ENLACE RECONECTANDO..." if not stream_loader.is_connected else "BUSCANDO TRAMAS..."
+            if has_new_frame and raw_frame is not None:
+                # Ajuste de tamaño táctico estándar para display
+                if raw_frame.shape[1] != settings.FRAME_WIDTH or raw_frame.shape[0] != settings.FRAME_HEIGHT:
+                    active_frame = cv2.resize(raw_frame, (settings.FRAME_WIDTH, settings.FRAME_HEIGHT))
+                else:
+                    active_frame = raw_frame
+                frame_counter += 1
+
+            if active_frame is None:
+                waiting_canvas = np.zeros((settings.FRAME_HEIGHT, settings.FRAME_WIDTH + 300, 3), dtype=np.uint8)
+                status_msg = "ENLACE RECONECTANDO..." if not stream_loader.is_connected else "BUSCANDO TRAMAS (MJPEG DRAIN)..."
                 cv2.putText(
                     waiting_canvas,
                     f"▲ LATTICE-CORE ISR: {status_msg}",
@@ -165,34 +230,26 @@ def run_orchestrator(stream_override: Optional[str] = None) -> None:
                     cv2.LINE_AA
                 )
                 cv2.imshow(window_name, waiting_canvas)
-                key = cv2.waitKey(15) & 0xFF
+                key = cv2.waitKey(10) & 0xFF
                 if key in (ord('q'), ord('Q'), 27):
                     break
                 continue
-
-            frame_counter += 1
-
-            # Ajuste de tamaño táctico estándar para display
-            if raw_frame.shape[1] != settings.FRAME_WIDTH or raw_frame.shape[0] != settings.FRAME_HEIGHT:
-                active_frame = cv2.resize(raw_frame, (settings.FRAME_WIDTH, settings.FRAME_HEIGHT))
-            else:
-                active_frame = raw_frame
 
             try:
                 # 5. Muestreo de Salud del Sistema (RAM <250MB, CPU, FPS)
                 health_metrics = health_monitor.sample(stream_loader.fps)
 
                 # Registrar frame en buffer circular de video para clips de evidencia
-                if settings.VIDEO_CLIP_ENABLED:
+                if settings.VIDEO_CLIP_ENABLED and has_new_frame:
                     video_recorder.push_frame(active_frame, stream_loader.fps)
 
-                # 6. Pipeline Térmico Monocromático (Calculado solo si se requiere o para análisis)
+                # 6. Pipeline Térmico Monocromático
                 thermal_rendered, detection_gray = thermal_processor.process_frame(active_frame)
 
-                # 7. Submuestreo Asíncrono de Inferencia (Cadencia cada 3 fotogramas para 60 FPS sostenidos)
+                # 7. Submuestreo Asíncrono de Inferencia (Cadencia cada 3 fotogramas de cámara para 60 FPS sostenidos)
                 is_inference_turn = (frame_counter == 1) or (frame_counter % inference_cadence == 0)
 
-                if is_inference_turn or (len(tracked_targets) == 0):
+                if has_new_frame and (is_inference_turn or len(tracked_targets) == 0):
                     inf_w = settings.INFERENCE_WIDTH
                     inf_h = settings.INFERENCE_HEIGHT
                     inf_rgb = cv2.resize(active_frame, (inf_w, inf_h), interpolation=cv2.INTER_LINEAR)
@@ -225,7 +282,7 @@ def run_orchestrator(stream_override: Optional[str] = None) -> None:
                     # 8. Seguimiento Continuo de Objetivos (Centroid Tracking & Motion Vectors)
                     tracked_targets = target_tracker.update(raw_detections, now_mono)
                 else:
-                    # Interpolación cinemática entre frames de inferencia (Bounding Boxes y tracking fluidos)
+                    # Interpolación cinemática continua (garantiza movimiento suave a 60 FPS aunque la cámara entregue 30 FPS)
                     tracked_targets = target_tracker.extrapolate_kinematics(now_mono)
 
                 # 9. Estimación Geoespacial (GPS, MGRS, UTM) e Inventario Semántico de Terreno (m²)
@@ -332,7 +389,9 @@ def run_orchestrator(stream_override: Optional[str] = None) -> None:
                             "RGB_TACTICAL",
                             health_metrics=health_metrics,
                             sector_inventory=sector_inventory,
-                            raw_sensor_frame=active_frame
+                            raw_sensor_frame=active_frame,
+                            focused_target_id=locked_target_id,
+                            target_history=target_tracker.get_target_history()
                         )
                         obsidian_exporter.export_recon_event_async(
                             hud_for_export,
@@ -359,14 +418,15 @@ def run_orchestrator(stream_override: Optional[str] = None) -> None:
                     mode_str,
                     health_metrics=health_metrics,
                     sector_inventory=sector_inventory,
-                    raw_sensor_frame=active_frame
+                    raw_sensor_frame=active_frame,
+                    focused_target_id=locked_target_id,
+                    target_history=target_tracker.get_target_history()
                 )
 
                 # Composición según el modo de visualización seleccionado
                 if display_mode == "RGB_HUD":
-                    final_view = hud_view  # Color RGB Original con HUD Táctico Sobreimpreso y Side Inspector
+                    final_view = hud_view
                 elif display_mode == "THERMAL_HUD":
-                    # Vista Térmica Secundaria (White/Black Hot) con HUD y Side Inspector
                     final_view = object_detector.render_tactical_hud(
                         thermal_rendered,
                         tracked_targets,
@@ -378,12 +438,13 @@ def run_orchestrator(stream_override: Optional[str] = None) -> None:
                         thermal_processor.current_palette.value,
                         health_metrics=health_metrics,
                         sector_inventory=sector_inventory,
-                        raw_sensor_frame=active_frame
+                        raw_sensor_frame=active_frame,
+                        focused_target_id=locked_target_id,
+                        target_history=target_tracker.get_target_history()
                     )
                 elif display_mode == "RAW":
-                    final_view = active_frame  # Solo video directo
+                    final_view = active_frame
                 elif display_mode == "SPLIT":
-                    # Pantalla dividida: Color RGB vs Térmico (con Side Inspector adjunto)
                     half_w = settings.FRAME_WIDTH // 2
                     raw_base = object_detector.render_tactical_hud(
                         active_frame,
@@ -395,7 +456,9 @@ def run_orchestrator(stream_override: Optional[str] = None) -> None:
                         settings.SOURCE_DEVICE_NAME,
                         "RGB_TACTICAL",
                         health_metrics=health_metrics,
-                        attach_side_panel=False
+                        attach_side_panel=False,
+                        focused_target_id=locked_target_id,
+                        target_history=target_tracker.get_target_history()
                     )
                     therm_base = object_detector.render_tactical_hud(
                         thermal_rendered,
@@ -407,12 +470,13 @@ def run_orchestrator(stream_override: Optional[str] = None) -> None:
                         settings.SOURCE_DEVICE_NAME,
                         thermal_processor.current_palette.value,
                         health_metrics=health_metrics,
-                        attach_side_panel=False
+                        attach_side_panel=False,
+                        focused_target_id=locked_target_id,
+                        target_history=target_tracker.get_target_history()
                     )
                     raw_half = cv2.resize(raw_base, (half_w, settings.FRAME_HEIGHT))
                     therm_half = cv2.resize(therm_base, (half_w, settings.FRAME_HEIGHT))
                     split_viewport = np.hstack((raw_half, therm_half))
-                    # Adjuntar Side Inspector Panel al viewport dividido
                     final_view = object_detector.render_tactical_hud(
                         split_viewport,
                         tracked_targets,
@@ -425,7 +489,9 @@ def run_orchestrator(stream_override: Optional[str] = None) -> None:
                         health_metrics=health_metrics,
                         sector_inventory=sector_inventory,
                         raw_sensor_frame=active_frame,
-                        attach_side_panel=True
+                        attach_side_panel=True,
+                        focused_target_id=locked_target_id,
+                        target_history=target_tracker.get_target_history()
                     )
                 else:
                     final_view = hud_view
@@ -436,8 +502,12 @@ def run_orchestrator(stream_override: Optional[str] = None) -> None:
                 logger.error(f"[PIPELINE-WARN] Frame omitido: {pipe_err}")
                 continue
 
-            # 16. Control de Teclado del Operador (Respuesta en tiempo real)
-            key = cv2.waitKey(1) & 0xFF
+            # 16. Control de Teclado del Operador y Temporizador de 60 FPS
+            loop_duration = time.perf_counter() - loop_start
+            sleep_sec = target_frame_interval - loop_duration
+            wait_key_ms = max(1, int(sleep_sec * 1000.0)) if sleep_sec > 0.001 else 1
+
+            key = cv2.waitKey(wait_key_ms) & 0xFF
 
             if key in (ord('q'), ord('Q'), 27):  # 'Q' o ESC -> Salir
                 logger.info("[OPERATOR] Comando de parada solicitado.")
@@ -458,11 +528,33 @@ def run_orchestrator(stream_override: Optional[str] = None) -> None:
                     manual_trigger=True
                 )
 
-            elif key in (ord('d'), ord('D')):  # 'D' -> Ciclar modo de visualización (RGB Principal / Térmico / Split / Raw)
+            elif key in (ord('d'), ord('D')):  # 'D' -> Ciclar modo de visualización
                 modes = ["RGB_HUD", "THERMAL_HUD", "SPLIT", "RAW"]
                 current_idx = modes.index(display_mode) if display_mode in modes else 0
                 display_mode = modes[(current_idx + 1) % len(modes)]
                 logger.info(f"[DISPLAY] Modo de visualización cambiado a: {display_mode}")
+
+            elif ord('1') <= key <= ord('9'):  # Teclas 1-9 -> Selección rápida de objetivo
+                idx = key - ord('1')
+                all_targets = target_tracker.get_all_known_targets()
+                if idx < len(all_targets):
+                    locked_target_id = all_targets[idx].target_id
+                    logger.info(f"[TARGET-LOCK] Objetivo fijado (Key {idx+1}): {locked_target_id}")
+
+            elif key in (9, ord('\t')):  # Tecla TAB -> Ciclar entre objetivos
+                all_targets = target_tracker.get_all_known_targets()
+                if all_targets:
+                    ids = [t.target_id for t in all_targets]
+                    if locked_target_id in ids:
+                        next_idx = (ids.index(locked_target_id) + 1) % len(ids)
+                    else:
+                        next_idx = 0
+                    locked_target_id = ids[next_idx]
+                    logger.info(f"[TARGET-LOCK] Objetivo ciclado (TAB): {locked_target_id}")
+
+            elif key in (ord('0'), ord('u'), ord('U')):  # Tecla 0 o 'U' -> Desbloquear objetivo
+                locked_target_id = None
+                logger.info("[TARGET-LOCK] Bloqueo liberado (Tecla 0 / Unlock).")
 
     except KeyboardInterrupt:
         logger.warning("[SHUTDOWN] Interrupción manual (SIGINT).")
