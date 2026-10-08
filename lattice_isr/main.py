@@ -129,9 +129,13 @@ def run_orchestrator(stream_override: Optional[str] = None) -> None:
 
     logger.info("[COMMAND] Modo Activo: COLOR RGB PRINCIPAL (60 FPS + ASYNC YOLO + SIDE INSPECTOR). Controles: [D] Modo de Vista | [B] Paleta Térmica | [S] Snapshot | [Q] Salir")
 
+    frame_counter = 0
+    inference_cadence = getattr(settings, "INFERENCE_CADENCE", 3)
+    tracked_targets: list = []
+
     try:
         while True:
-            has_frame, raw_frame = stream_loader.read(timeout=0.03)
+            has_frame, raw_frame = stream_loader.read(timeout=0.01)
 
             now_mono = time.monotonic()
             timestamp_id = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -166,6 +170,8 @@ def run_orchestrator(stream_override: Optional[str] = None) -> None:
                     break
                 continue
 
+            frame_counter += 1
+
             # Ajuste de tamaño táctico estándar para display
             if raw_frame.shape[1] != settings.FRAME_WIDTH or raw_frame.shape[0] != settings.FRAME_HEIGHT:
                 active_frame = cv2.resize(raw_frame, (settings.FRAME_WIDTH, settings.FRAME_HEIGHT))
@@ -183,38 +189,44 @@ def run_orchestrator(stream_override: Optional[str] = None) -> None:
                 # 6. Pipeline Térmico Monocromático (Calculado solo si se requiere o para análisis)
                 thermal_rendered, detection_gray = thermal_processor.process_frame(active_frame)
 
-                # 7. Inferencia Optimizada a 60 FPS (Downscale para procesar 4x más rápido en CPU)
-                inf_w = settings.INFERENCE_WIDTH
-                inf_h = settings.INFERENCE_HEIGHT
-                inf_rgb = cv2.resize(active_frame, (inf_w, inf_h), interpolation=cv2.INTER_LINEAR)
-                inf_gray = cv2.resize(detection_gray, (inf_w, inf_h), interpolation=cv2.INTER_LINEAR)
+                # 7. Submuestreo Asíncrono de Inferencia (Cadencia cada 3 fotogramas para 60 FPS sostenidos)
+                is_inference_turn = (frame_counter == 1) or (frame_counter % inference_cadence == 0)
 
-                # Detección e Identificación Multiclase Neuronal YOLOv8 Asíncrona (Threaded a 60 FPS)
-                raw_inf_detections = object_detector.detect_objects(
-                    frame_rgb=inf_rgb,
-                    base_timestamp_id=timestamp_id,
-                    gray_fallback=inf_gray,
-                    async_mode=True
-                )
+                if is_inference_turn or (len(tracked_targets) == 0):
+                    inf_w = settings.INFERENCE_WIDTH
+                    inf_h = settings.INFERENCE_HEIGHT
+                    inf_rgb = cv2.resize(active_frame, (inf_w, inf_h), interpolation=cv2.INTER_LINEAR)
+                    inf_gray = cv2.resize(detection_gray, (inf_w, inf_h), interpolation=cv2.INTER_LINEAR)
 
-                # Reescalar coordenadas de detección al tamaño real de visualización
-                scale_x = settings.FRAME_WIDTH / float(inf_w)
-                scale_y = settings.FRAME_HEIGHT / float(inf_h)
-                raw_detections = []
-                for d in raw_inf_detections:
-                    scaled_d = d.model_copy(update={
-                        "bbox_x": int(d.bbox_x * scale_x),
-                        "bbox_y": int(d.bbox_y * scale_y),
-                        "bbox_w": int(d.bbox_w * scale_x),
-                        "bbox_h": int(d.bbox_h * scale_y),
-                        "centroid_x": int(d.centroid_x * scale_x),
-                        "centroid_y": int(d.centroid_y * scale_y),
-                        "area_px": int(d.area_px * (scale_x * scale_y))
-                    })
-                    raw_detections.append(scaled_d)
+                    # Detección e Identificación Multiclase Neuronal YOLOv8 Asíncrona
+                    raw_inf_detections = object_detector.detect_objects(
+                        frame_rgb=inf_rgb,
+                        base_timestamp_id=timestamp_id,
+                        gray_fallback=inf_gray,
+                        async_mode=True
+                    )
 
-                # 8. Seguimiento Continuo de Objetivos (Centroid Tracking & Motion Vectors)
-                tracked_targets = target_tracker.update(raw_detections, now_mono)
+                    # Reescalar coordenadas de detección al tamaño real de visualización
+                    scale_x = settings.FRAME_WIDTH / float(inf_w)
+                    scale_y = settings.FRAME_HEIGHT / float(inf_h)
+                    raw_detections = []
+                    for d in raw_inf_detections:
+                        scaled_d = d.model_copy(update={
+                            "bbox_x": int(d.bbox_x * scale_x),
+                            "bbox_y": int(d.bbox_y * scale_y),
+                            "bbox_w": int(d.bbox_w * scale_x),
+                            "bbox_h": int(d.bbox_h * scale_y),
+                            "centroid_x": int(d.centroid_x * scale_x),
+                            "centroid_y": int(d.centroid_y * scale_y),
+                            "area_px": int(d.area_px * (scale_x * scale_y))
+                        })
+                        raw_detections.append(scaled_d)
+
+                    # 8. Seguimiento Continuo de Objetivos (Centroid Tracking & Motion Vectors)
+                    tracked_targets = target_tracker.update(raw_detections, now_mono)
+                else:
+                    # Interpolación cinemática entre frames de inferencia (Bounding Boxes y tracking fluidos)
+                    tracked_targets = target_tracker.extrapolate_kinematics(now_mono)
 
                 # 9. Estimación Geoespacial (GPS, MGRS, UTM) e Inventario Semántico de Terreno (m²)
                 geo_positions: Dict[str, TargetGeoPosition] = {}

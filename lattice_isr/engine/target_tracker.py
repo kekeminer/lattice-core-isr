@@ -120,6 +120,33 @@ class TargetTrackerManager:
 
         return list(self._tracked_targets.values())
 
+    def extrapolate_kinematics(self, frame_timestamp: float) -> List[TrackedTargetState]:
+        """
+        Interpola y extrapola cinemáticamente las coordenadas de los objetivos rastreados
+        entre fotogramas de inferencia (Inference Frame-Skipping a 60 FPS).
+        Preserva en pantalla las cajas delimitadoras, clases y etiquetas del último análisis válido.
+        """
+        for tid, target in self._tracked_targets.items():
+            dt = frame_timestamp - target.last_seen_timestamp
+            if dt > 0.001 and target.velocity_px_s > 0.5 and target.heading_deg > 0:
+                rad = math.radians(target.heading_deg)
+                dx = target.velocity_px_s * math.sin(rad) * dt
+                dy = -target.velocity_px_s * math.cos(rad) * dt
+
+                target.centroid_x = int(round(target.centroid_x + dx))
+                target.centroid_y = int(round(target.centroid_y + dy))
+                target.bbox_x = int(round(target.centroid_x - (target.bbox_w / 2.0)))
+                target.bbox_y = int(round(target.centroid_y - (target.bbox_h / 2.0)))
+                target.last_seen_timestamp = frame_timestamp
+
+                if tid in self._trajectories:
+                    self._trajectories[tid].append((target.centroid_x, target.centroid_y))
+                    target.trajectory = list(self._trajectories[tid])
+            else:
+                target.last_seen_timestamp = frame_timestamp
+
+        return list(self._tracked_targets.values())
+
     def _register_new_target(self, detection: TargetDetection, timestamp: float) -> None:
         """Registra una nueva entidad táctica asignando un ID único secuencial."""
         tid = f"TRG-{self._next_target_numeric_id:03d}"

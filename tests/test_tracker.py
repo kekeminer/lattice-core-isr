@@ -73,3 +73,22 @@ def test_tracker_purge_inactive_targets():
 
     tracker.update([], frame_timestamp=4.0)  # disappeared=3 -> debe purgarse
     assert tracker.active_targets_count == 0
+
+
+def test_tracker_extrapolate_kinematics_frame_skipping():
+    settings = SystemSettings()
+    tracker = TargetTrackerManager(settings)
+
+    # Frame 1: registro inicial
+    tracker.update([create_dummy_detection(100, 100)], frame_timestamp=10.0)
+    # Frame 2: movimiento a la derecha (heading = 90°, vx > 0)
+    tracker.update([create_dummy_detection(120, 100)], frame_timestamp=11.0)
+
+    # Frame 3 (Salteo de inferencia a 60 FPS): interpolación cinemática
+    interpolated = tracker.extrapolate_kinematics(frame_timestamp=11.5)
+    assert len(interpolated) == 1
+    t = interpolated[0]
+    assert t.target_id == "TRG-001"
+    # Debe haber avanzado en X debido a su rumbo y velocidad
+    assert t.centroid_x > 120
+    assert t.bbox_x == int(round(t.centroid_x - (t.bbox_w / 2.0)))

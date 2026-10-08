@@ -131,11 +131,12 @@ class AsyncStreamLoader:
         now = time.monotonic()
         try:
             latest_frame = self._buffer.get(block=True, timeout=timeout)
-            # Drenar cuadros intermedios obsoletos para garantizar latencia cero
+            # Drenar agresivamente cuadros intermedios acumulados para entregar únicamente el más reciente
             while not self._buffer.empty():
                 try:
-                    older_frame = self._buffer.get_nowait()
-                    del older_frame
+                    newer_frame = self._buffer.get_nowait()
+                    del latest_frame
+                    latest_frame = newer_frame
                     with self._lock:
                         self._dropped_frames += 1
                 except queue.Empty:
@@ -206,16 +207,16 @@ class AsyncStreamLoader:
 
                     last_active_time = now
 
-                    # Política de descarte FIFO del frame más antiguo con liberación explícita
-                    if self._buffer.full():
+                    # Vaciado agresivo de buffer (Zero-Latency Frame Dropping)
+                    # Si el buffer contiene más de 1 fotograma acumulado o está lleno, descarta los cuadros anteriores
+                    while self._buffer.qsize() >= 1:
                         try:
                             old_frame = self._buffer.get_nowait()
-                            # Dereferenciar explícitamente la matriz descartada
                             del old_frame
                             with self._lock:
                                 self._dropped_frames += 1
                         except queue.Empty:
-                            pass
+                            break
 
                     self._buffer.put_nowait(frame)
 

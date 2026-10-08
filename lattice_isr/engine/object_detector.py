@@ -138,6 +138,13 @@ class ThermalObjectDetector:
     3. Panel Lateral Táctico (Side Inspector Panel de 300px) con telemetría espectral e inventario de m².
     """
 
+    _INSPECTOR_CACHE: Dict[str, Any] = {
+        "target_id": None,
+        "last_analysis_time": 0.0,
+        "dominant_attr_str": "Indeterminado",
+        "thumbnail": None
+    }
+
     def __init__(self, settings: SystemSettings):
         self._settings = settings
         self._morph_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
@@ -170,6 +177,8 @@ class ThermalObjectDetector:
         self._latest_detections: List[TargetDetection] = []
         self._latest_detections_lock = threading.Lock()
         self._last_inference_fps: float = 0.0
+        self._inference_cadence: int = getattr(settings, "INFERENCE_CADENCE", 3)
+        self._frame_count: int = 0
 
         if self._yolo_enabled:
             self._init_yolo_model()
@@ -282,7 +291,11 @@ class ThermalObjectDetector:
         if async_mode:
             if self._worker_thread is None or not self._worker_thread.is_alive():
                 self.start_async_worker()
-            self.submit_frame_async(frame_rgb, base_timestamp_id, gray_fallback)
+            self._frame_count += 1
+            # Submuestreo asíncrono (Inference Frame-Skipping a 60 FPS):
+            # Iniciar en frame 1 y luego enviar únicamente cada INFERENCE_CADENCE fotogramas
+            if self._frame_count == 1 or (self._frame_count % self._inference_cadence) == 0:
+                self.submit_frame_async(frame_rgb, base_timestamp_id, gray_fallback)
             return self.get_latest_detections()
 
         # Inferencia Sincrónica Directa
@@ -642,12 +655,12 @@ class ThermalObjectDetector:
         # 5. PANEL LATERAL DE INSPECCIÓN TÁCTICA (SIDE INSPECTOR PANEL - 300px)
         # =====================================================================
         PANEL_WIDTH = 300
-        composite = np.zeros((height, width + PANEL_WIDTH, 3), dtype=np.uint8)
+        # Optimización vectorizada NumPy para composición a 60 FPS sin sobrecarga
+        composite = np.empty((height, width + PANEL_WIDTH, 3), dtype=np.uint8)
         composite[:, :width] = hud
+        composite[:, width:] = COLOR_PANEL_BG
 
         px_start = width
-        # Relleno del panel lateral
-        cv2.rectangle(composite, (px_start, 0), (px_start + PANEL_WIDTH, height), COLOR_PANEL_BG, -1)
         # Línea divisoria vertical principal
         cv2.line(composite, (px_start, 0), (px_start, height), COLOR_BORDER_GREY, 1)
 
@@ -703,24 +716,43 @@ class ThermalObjectDetector:
             cv2.putText(composite, f"THREAT: [{target_focus.threat_level}]", (px_start + 14, curr_y), cv2.FONT_HERSHEY_SIMPLEX, 0.38, COLOR_TEXT_DIM, 1, cv2.LINE_AA)
             curr_y += 24
 
-            # Miniatura (Thumbnail) del Objetivo y Análisis de Atributos HSV
-            src_frame = raw_sensor_frame if raw_sensor_frame is not None else canvas
-            bx, by, bw, bh = target_focus.bbox_x, target_focus.bbox_y, target_focus.bbox_w, target_focus.bbox_h
-            h_f, w_f = src_frame.shape[:2]
-            y1 = max(0, min(h_f - 1, by))
-            y2 = max(0, min(h_f, by + bh))
-            x1 = max(0, min(w_f - 1, bx))
-            x2 = max(0, min(w_f, bx + bw))
+            # Miniatura (Thumbnail) del Objetivo y Análisis HSV Cacheados
+            # Se recalcula únicamente si cambia el objetivo seleccionado o transcurre 1 segundo
+            now_t = time.monotonic()
+            cache = cls._INSPECTOR_CACHE
+            need_refresh = (
+                cache["target_id"] != target_focus.target_id
+                or (now_t - cache["last_analysis_time"]) >= 1.0
+                or cache["thumbnail"] is None
+            )
 
-            roi = src_frame[y1:y2, x1:x2] if (y2 > y1 and x2 > x1) else None
-            dominant_attr_str = extract_dominant_color_hsv(roi, target_focus.class_name)
+            if need_refresh:
+                src_frame = raw_sensor_frame if raw_sensor_frame is not None else canvas
+                bx, by, bw, bh = target_focus.bbox_x, target_focus.bbox_y, target_focus.bbox_w, target_focus.bbox_h
+                h_f, w_f = src_frame.shape[:2]
+                y1 = max(0, min(h_f - 1, by))
+                y2 = max(0, min(h_f, by + bh))
+                x1 = max(0, min(w_f - 1, bx))
+                x2 = max(0, min(w_f, bx + bw))
 
-            if roi is not None and roi.size > 0:
+                roi = src_frame[y1:y2, x1:x2] if (y2 > y1 and x2 > x1) else None
+                cache["dominant_attr_str"] = extract_dominant_color_hsv(roi, target_focus.class_name)
+                if roi is not None and roi.size > 0:
+                    cache["thumbnail"] = cv2.resize(roi, (100, 75), interpolation=cv2.INTER_LINEAR)
+                else:
+                    cache["thumbnail"] = None
+                cache["target_id"] = target_focus.target_id
+                cache["last_analysis_time"] = now_t
+
+            dominant_attr_str = cache["dominant_attr_str"]
+            thumb = cache["thumbnail"]
+
+            if thumb is not None:
                 thumb_w, thumb_h = 100, 75
-                thumb = cv2.resize(roi, (thumb_w, thumb_h), interpolation=cv2.INTER_LINEAR)
+                # Composición vectorizada ultrarrápida de la miniatura
+                composite[curr_y:curr_y + thumb_h, px_start + 14:px_start + 14 + thumb_w] = thumb
                 # Borde táctico alrededor de la miniatura
                 cv2.rectangle(composite, (px_start + 14, curr_y), (px_start + 14 + thumb_w, curr_y + thumb_h), COLOR_BORDER_GREY, 1)
-                composite[curr_y:curr_y + thumb_h, px_start + 14:px_start + 14 + thumb_w] = thumb
 
                 # Estado de Alerta destacado al costado de la miniatura
                 alert_text = "STATUS: BREACH" if is_breach else "STATUS: SAFE"
@@ -790,8 +822,8 @@ class ThermalObjectDetector:
 
         # 5.3 Ficha Inferior de Inventario Táctico del Sector y Cobertura (m²)
         box_y = max(curr_y + 10, height - 120)
+        composite[box_y:, px_start:] = COLOR_BLACK
         cv2.line(composite, (px_start, box_y), (px_start + PANEL_WIDTH, box_y), COLOR_BORDER_GREY, 1)
-        cv2.rectangle(composite, (px_start, box_y), (px_start + PANEL_WIDTH, height), COLOR_BLACK, -1)
 
         cv2.putText(
             composite,

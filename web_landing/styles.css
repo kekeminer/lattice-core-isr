@@ -149,6 +149,47 @@ body {
   color: var(--accent-light);
 }
 
+/* Selector de Idioma Táctico (ES / EN) */
+.lang-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.55rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  user-select: none;
+}
+
+.lang-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 500;
+  padding: 0.15rem 0.25rem;
+  transition: color var(--transition-fast);
+  outline: none;
+}
+
+.lang-btn:hover {
+  color: var(--text-primary);
+}
+
+.lang-btn.active {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.lang-divider {
+  color: var(--text-dim);
+  font-size: 0.70rem;
+}
+
 /* Hero Section */
 .hero {
   padding: 5.5rem 0 3.5rem;

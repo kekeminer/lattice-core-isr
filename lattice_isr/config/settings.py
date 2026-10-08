@@ -60,6 +60,7 @@ class SystemSettings(BaseSettings):
     FRAME_HEIGHT: int = Field(default=720, ge=240, le=2160)
     INFERENCE_WIDTH: int = Field(default=640, ge=320, le=1920, description="Ancho de frame para inferencia de visión a 60 FPS")
     INFERENCE_HEIGHT: int = Field(default=384, ge=192, le=1080, description="Alto de frame para inferencia (múltiplo de stride 32)")
+    INFERENCE_CADENCE: int = Field(default=3, ge=1, le=30, description="Cadencia de inferencia neuronal (ejecuta YOLO cada N frames para 60 FPS sostenidos)")
 
     # Motor de Detección e Inferencia Neuronal (YOLOv8 & Respaldo Térmico)
     YOLO_ENABLED: bool = Field(default=True, description="Habilitar inferencia por red neuronal YOLOv8")
