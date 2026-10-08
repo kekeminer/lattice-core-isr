@@ -3,156 +3,276 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LATTICE-CORE ISR | Plataforma Autónoma Táctica C2 y Reconocimiento IA</title>
-  <meta name="description" content="Estación de Mando y Control (C2) de código abierto para drones y sensores de borde con inferencia neuronal YOLOv8, geolocalización MGRS y persistencia en Obsidian.">
+  <title>LATTICE-CORE ISR | Plataforma Táctica C2 y Reconocimiento Edge</title>
+  <meta name="description" content="Plataforma C2 de grado industrial para procesamiento ISR en tiempo real: inferencia neuronal asíncrona YOLOv8 a 60 FPS, geolocalización esférica MGRS/UTM y auditoría forense en Obsidian.">
   <link rel="stylesheet" href="styles.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
 
-  <!-- Barra de Navegación -->
+  <!-- Barra de Navegación Técnica -->
   <header class="navbar">
     <div class="brand">
-      <span class="brand-icon">▲</span>
+      <div class="brand-mark">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="12 2 2 22 22 22 12 2"/>
+        </svg>
+      </div>
       <span class="brand-name">LATTICE-CORE ISR</span>
-      <span class="brand-badge">OPEN SOURCE</span>
+      <span class="brand-version">v1.0.0 // OPEN SOURCE</span>
     </div>
     <nav class="nav-links">
-      <a href="#caracteristicas">Características</a>
-      <a href="#arquitectura">Especificaciones</a>
-      <a href="https://github.com/tu-usuario/lattice-core-isr" class="btn-github" target="_blank" rel="noopener">
-        <span>GitHub</span>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+      <a href="#metricas" class="nav-link">Telemetría</a>
+      <a href="#capacidades" class="nav-link">Capacidades</a>
+      <a href="#despliegue" class="nav-link">Despliegue</a>
+      <a href="https://github.com/kekeminer/lattice-core-isr" class="btn-github" target="_blank" rel="noopener">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
         </svg>
+        <span>GitHub Repository</span>
       </a>
     </nav>
   </header>
 
   <!-- Hero Section -->
-  <section class="hero">
-    <div class="container">
-      <div class="hero-tagline">Autonomous Tactical Edge Recognition & C2 Platform</div>
-      <h1 class="hero-title">
-        Mando y Control ISR Autónomo <span>Impulsado por IA de Borde</span>
-      </h1>
-      <p class="hero-description">
-        Estación terrena de alto rendimiento para drones y dispositivos edge. Ingesta a 60 FPS sin latencia, clasificación neuronal YOLOv8, georreferenciación esférica MGRS, alertas de voz sintetizadas y auditoría forense automática en Obsidian.
-      </p>
-      <div class="hero-actions">
-        <a href="https://github.com/tu-usuario/lattice-core-isr" class="btn-primary" target="_blank" rel="noopener">Ver Código en GitHub</a>
-        <a href="#caracteristicas" class="btn-secondary">Explorar Capacidades</a>
-      </div>
+  <main>
+    <section class="hero">
+      <div class="container">
+        <h1 class="hero-title">
+          Estación de Mando y Control Táctico
+          <span class="hero-title-accent">para Procesamiento ISR Periférico</span>
+        </h1>
+        <p class="hero-description">
+          Plataforma de ingeniería de misión crítica para nodos Edge. Ingesta a 60 FPS sin degradación de latencia, clasificación neuronal YOLOv8 desacoplada, telemetría cinemática en panel lateral, proyección esférica MGRS/UTM y registro de auditoría en Obsidian.
+        </p>
 
-      <!-- Quick Clone Terminal -->
-      <div class="clone-terminal">
-        <div class="terminal-header">
-          <div class="terminal-dots">
-            <span class="dot"></span>
-            <span class="dot"></span>
-            <span class="dot"></span>
+        <div class="hero-actions">
+          <a href="https://github.com/kekeminer/lattice-core-isr" class="btn-primary" target="_blank" rel="noopener">
+            <span>Repositorio Oficial</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="7" y1="17" x2="17" y2="7"></line>
+              <polyline points="7 7 17 7 17 17"></polyline>
+            </svg>
+          </a>
+          <a href="#capacidades" class="btn-secondary">
+            <span>Especificaciones Técnicas</span>
+          </a>
+        </div>
+
+        <!-- Terminal de Despliegue Rápido -->
+        <div class="terminal-container" id="despliegue">
+          <div class="terminal-bar">
+            <div class="terminal-indicators">
+              <span class="indicator"></span>
+              <span class="indicator"></span>
+              <span class="indicator"></span>
+            </div>
+            <span class="terminal-title">SHELL // CLONACIÓN Y DESPLIEGUE</span>
+            <span class="terminal-protocol">HTTPS / GIT</span>
           </div>
-          <span>bash / powershell</span>
-        </div>
-        <div class="terminal-body">
-          <code class="terminal-code" id="cmd-text">git clone https://github.com/tu-usuario/lattice-core-isr.git</code>
-          <button class="btn-copy" id="btn-copy" onclick="copyCloneCommand()">Copiar</button>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Especificaciones Rápidas -->
-  <section class="specs" id="arquitectura">
-    <div class="container">
-      <div class="specs-grid">
-        <div class="spec-item">
-          <div class="num">60 FPS</div>
-          <div class="label">Zero-Latency Pipeline</div>
-        </div>
-        <div class="spec-item">
-          <div class="num">&lt; 160 MB</div>
-          <div class="label">Huella de Memoria RAM</div>
-        </div>
-        <div class="spec-item">
-          <div class="num">38 / 38</div>
-          <div class="label">Tests Unitarios (100% OK)</div>
-        </div>
-        <div class="spec-item">
-          <div class="num">MGRS</div>
-          <div class="label">Geolocalización Militar</div>
+          <div class="terminal-body">
+            <span class="terminal-prompt">$</span>
+            <code class="terminal-code" id="cmd-text">git clone https://github.com/kekeminer/lattice-core-isr.git</code>
+            <button class="btn-copy" id="btn-copy" onclick="copyCloneCommand()" aria-label="Copiar comando de clonación">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              <span id="copy-label">Copiar</span>
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Grid de Características -->
-  <section class="features" id="caracteristicas">
-    <div class="container">
-      <div class="section-header">
-        <h2 class="section-title">Capacidades Operativas de Grado Empresarial</h2>
-        <p class="section-subtitle">Diseñado con arquitectura modular limpia para misiones de reconocimiento crítico.</p>
-      </div>
-
-      <div class="grid">
-        <div class="card">
-          <div class="card-icon">🤖</div>
-          <h3 class="card-title">Reconocimiento Neuronal YOLOv8</h3>
-          <p class="card-text">
-            Clasificación multiclase de personas, vehículos (autos, camiones, buses, motos, bicis) y equipamiento en tiempo real con overlay táctico detallado y estimación de rumbo.
-          </p>
-        </div>
-
-        <div class="card">
-          <div class="card-icon">🌐</div>
-          <h3 class="card-title">Geolocalización Esférica & MGRS</h3>
-          <p class="card-text">
-            Proyección instantánea de objetivos en coordenadas WGS84, azimut relativo y cuadrícula de precisión militar Military Grid Reference System (MGRS).
-          </p>
-        </div>
-
-        <div class="card">
-          <div class="card-icon">🛡️</div>
-          <h3 class="card-title">Geocercas con Filtro Semántico</h3>
-          <p class="card-text">
-            Zona de exclusión perimetral configurable (15m) con discriminación inteligente de amenazas: solo objetos tácticos críticos disparan alertas.
-          </p>
-        </div>
-
-        <div class="card">
-          <div class="card-icon">🔊</div>
-          <h3 class="card-title">Alertas por Voz Sintetizada</h3>
-          <p class="card-text">
-            Notificaciones audibles inmediatas no bloqueantes con motor pyttsx3 y control de cooldown (5s) para mantener al operador alerta sin saturación acústica.
-          </p>
-        </div>
-
-        <div class="card">
-          <div class="card-icon">🎬</div>
-          <h3 class="card-title">Clips Forenses de Video MP4</h3>
-          <p class="card-text">
-            Buffer rodante continuo en memoria que empaqueta automáticamente clips de video de 5 segundos ante incursiones confirmadas y los almacena en disco.
-          </p>
-        </div>
-
-        <div class="card">
-          <div class="card-icon">📓</div>
-          <h3 class="card-title">Bóveda Local Obsidian Vault</h3>
-          <p class="card-text">
-            Indexación out-of-the-box de reportes Markdown con frontmatter YAML compatible con Dataview, evidencia radiométrica y enlaces multimedia directos.
-          </p>
+    <!-- Tira de Métricas Principal -->
+    <section class="metrics-strip" id="metricas" aria-label="Métricas de Rendimiento del Sistema">
+      <div class="container">
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-value">60 FPS</div>
+            <div class="metric-title">60 FPS Continuous Render Rate</div>
+            <div class="metric-sub">Rendimiento del Canvas</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">&lt; 160 MB</div>
+            <div class="metric-title">&lt; 160 MB Memory Footprint</div>
+            <div class="metric-sub">Consumo de RAM</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">42 / 42</div>
+            <div class="metric-title">42 / 42 QA Test Suites Passed (100% Coverage)</div>
+            <div class="metric-sub">Validación Operativa</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">MGRS / UTM</div>
+            <div class="metric-title">MGRS / UTM Spherical Geolocation Engine</div>
+            <div class="metric-sub">Coordenadas Tácticas</div>
+          </div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Footer -->
+    <!-- Capacidades Operativas del Sistema -->
+    <section class="capabilities-section" id="capacidades">
+      <div class="container">
+        <header class="section-header">
+          <div class="section-tag">SISTEMAS MODULARES</div>
+          <h2 class="section-title">Capacidades Operativas del Sistema</h2>
+          <p class="section-description">
+            Arquitectura modular asíncrona optimizada para procesamiento de telemetría y reconocimiento en nodos de cómputo periférico (Edge Computing).
+          </p>
+        </header>
+
+        <div class="capabilities-grid">
+          <!-- Card 1 -->
+          <article class="cap-card">
+            <div class="cap-card-header">
+              <span class="cap-index">MOD-01</span>
+              <span class="cap-tag">NEURAL PIPELINE</span>
+            </div>
+            <h3 class="cap-title">Detección Neuronal Asíncrona (YOLOv8)</h3>
+            <p class="cap-text">
+              Inferencia multiclase en hilo secundario desacoplado a resolución Stride 32 (384x640), garantizando renderizado gráfico fluido sin latencia de captura.
+            </p>
+            <div class="cap-footer">
+              <span class="cap-spec">RESOLUCIÓN: 384x640 (STRIDE 32)</span>
+            </div>
+          </article>
+
+          <!-- Card 2 -->
+          <article class="cap-card">
+            <div class="cap-card-header">
+              <span class="cap-index">MOD-02</span>
+              <span class="cap-tag">TACTICAL HUD</span>
+            </div>
+            <h3 class="cap-title">Panel de Inspección Táctica (Side Inspector)</h3>
+            <p class="cap-text">
+              Telemetría lateral en tiempo real con recortes dinamizados, vectores cinemáticos (rumbo y velocidad) y caracterización de vestimenta/superficies mediante cuantización de espectro HSV.
+            </p>
+            <div class="cap-footer">
+              <span class="cap-spec">LAYOUT: 300PX DEDICADO // ESPECTRO HSV</span>
+            </div>
+          </article>
+
+          <!-- Card 3 -->
+          <article class="cap-card">
+            <div class="cap-card-header">
+              <span class="cap-index">MOD-03</span>
+              <span class="cap-tag">GEOSPATIAL COV</span>
+            </div>
+            <h3 class="cap-title">Análisis de Terreno y Cobertura Métrica (m²)</h3>
+            <p class="cap-text">
+              Trigonometría proyectiva basada en distancia focal y FOV angular para el cálculo de superficie encuadrada e inventario sectorial de densidad.
+            </p>
+            <div class="cap-footer">
+              <span class="cap-spec">MODELO: PINHOLE + WGS84 ESFÉRICO</span>
+            </div>
+          </article>
+
+          <!-- Card 4 -->
+          <article class="cap-card">
+            <div class="cap-card-header">
+              <span class="cap-index">MOD-04</span>
+              <span class="cap-tag">PERIMETER DEFENSE</span>
+            </div>
+            <h3 class="cap-title">Perímetro Virtual y Persistencia Sostenida</h3>
+            <p class="cap-text">
+              Geofencing con filtrado semántico de amenazas y ventana de permanencia continua (> 3.0s) para mitigar falsos positivos.
+            </p>
+            <div class="cap-footer">
+              <span class="cap-spec">DISCRIMINACIÓN: CLASES CRÍTICAS COCO</span>
+            </div>
+          </article>
+
+          <!-- Card 5 -->
+          <article class="cap-card">
+            <div class="cap-card-header">
+              <span class="cap-index">MOD-05</span>
+              <span class="cap-tag">AUDIO & VIDEO C2</span>
+            </div>
+            <h3 class="cap-title">Síntesis de Alertas Sonoras y Grabación Forense</h3>
+            <p class="cap-text">
+              Transmisión de voz asíncrona no bloqueante y empaquetado automático de clips .mp4 en búfer circular ante eventos confirmados.
+            </p>
+            <div class="cap-footer">
+              <span class="cap-spec">MOTOR: PYTTSX3 + MP4 ROLLING BUFFER</span>
+            </div>
+          </article>
+
+          <!-- Card 6 -->
+          <article class="cap-card">
+            <div class="cap-card-header">
+              <span class="cap-index">MOD-06</span>
+              <span class="cap-tag">STORAGE & STREAM</span>
+            </div>
+            <h3 class="cap-title">Persistencia Híbrida y Dashboard Web</h3>
+            <p class="cap-text">
+              Integración nativa con Bóveda de Obsidian en Markdown, base de datos embebida SQLite y servidor WebSockets para la estación de control en vivo.
+            </p>
+            <div class="cap-footer">
+              <span class="cap-spec">PROTOCOLOS: WEBSOCKETS + SQLITE WAL + OBSIDIAN</span>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Arquitectura de Pipeline -->
+    <section class="pipeline-section">
+      <div class="container">
+        <div class="pipeline-box">
+          <div class="pipeline-header">
+            <span class="pipeline-kicker">FLUJO DE PROCESAMIENTO DETERMINISTA</span>
+            <h3 class="pipeline-title">Topología de Flujo Asíncrono de Cuadros</h3>
+          </div>
+          <div class="pipeline-flow">
+            <div class="pipe-node">
+              <span class="pipe-step">PASO 01</span>
+              <span class="pipe-label">Ingesta Edge Video</span>
+              <span class="pipe-sub">RTSP / HTTP (OpenCV)</span>
+            </div>
+            <div class="pipe-separator">→</div>
+            <div class="pipe-node">
+              <span class="pipe-step">PASO 02</span>
+              <span class="pipe-label">Inferencia Desacoplada</span>
+              <span class="pipe-sub">YOLOv8 Stride 32 (384x640)</span>
+            </div>
+            <div class="pipe-separator">→</div>
+            <div class="pipe-node">
+              <span class="pipe-step">PASO 03</span>
+              <span class="pipe-label">Tracking & Geodesia</span>
+              <span class="pipe-sub">Centroides, MGRS y m²</span>
+            </div>
+            <div class="pipe-separator">→</div>
+            <div class="pipe-node">
+              <span class="pipe-step">PASO 04</span>
+              <span class="pipe-label">Render & Auditoría</span>
+              <span class="pipe-sub">60 FPS HUD + Obsidian Vault</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Pie de Página Institucional -->
   <footer class="footer">
-    <div class="container">
-      <p>LATTICE-CORE ISR — Distribuido bajo Licencia Abierta MIT.</p>
-      <p>Diseñado para Mando, Control y Reconocimiento Táctico de Borde.</p>
+    <div class="container footer-content">
+      <div class="footer-meta">
+        <div class="footer-title">LATTICE-CORE ISR</div>
+        <p class="footer-text">
+          Plataforma de Reconocimiento Táctico, Telemetría y Geolocalización de Código Abierto.
+        </p>
+        <p class="footer-license">Licencia Abierta MIT // Repositorio kekeminer/lattice-core-isr</p>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/kekeminer/lattice-core-isr" target="_blank" rel="noopener">Repositorio GitHub</a>
+        <a href="https://github.com/kekeminer/lattice-core-isr/blob/main/LICENSE" target="_blank" rel="noopener">Licencia MIT</a>
+        <a href="https://github.com/kekeminer/lattice-core-isr/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Guía de Contribución</a>
+      </div>
     </div>
   </footer>
 
@@ -160,9 +280,14 @@
     function copyCloneCommand() {
       const text = document.getElementById("cmd-text").innerText;
       navigator.clipboard.writeText(text).then(() => {
+        const copyLabel = document.getElementById("copy-label");
         const btn = document.getElementById("btn-copy");
-        btn.innerText = "¡Copiado!";
-        setTimeout(() => { btn.innerText = "Copiar"; }, 2000);
+        copyLabel.innerText = "Copiado";
+        btn.classList.add("copied");
+        setTimeout(() => {
+          copyLabel.innerText = "Copiar";
+          btn.classList.remove("copied");
+        }, 2000);
       });
     }
   </script>
