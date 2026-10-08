@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LATTICE-CORE ISR | Plataforma Autónoma Táctica C2 y Reconocimiento IA</title>
+  <meta name="description" content="Estación de Mando y Control (C2) de código abierto para drones y sensores de borde con inferencia neuronal YOLOv8, geolocalización MGRS y persistencia en Obsidian.">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- Barra de Navegación -->
+  <header class="navbar">
+    <div class="brand">
+      <span class="brand-icon">▲</span>
+      <span class="brand-name">LATTICE-CORE ISR</span>
+      <span class="brand-badge">OPEN SOURCE</span>
+    </div>
+    <nav class="nav-links">
+      <a href="#caracteristicas">Características</a>
+      <a href="#arquitectura">Especificaciones</a>
+      <a href="https://github.com/tu-usuario/lattice-core-isr" class="btn-github" target="_blank" rel="noopener">
+        <span>GitHub</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+        </svg>
+      </a>
+    </nav>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-tagline">Autonomous Tactical Edge Recognition & C2 Platform</div>
+      <h1 class="hero-title">
+        Mando y Control ISR Autónomo <span>Impulsado por IA de Borde</span>
+      </h1>
+      <p class="hero-description">
+        Estación terrena de alto rendimiento para drones y dispositivos edge. Ingesta a 60 FPS sin latencia, clasificación neuronal YOLOv8, georreferenciación esférica MGRS, alertas de voz sintetizadas y auditoría forense automática en Obsidian.
+      </p>
+      <div class="hero-actions">
+        <a href="https://github.com/tu-usuario/lattice-core-isr" class="btn-primary" target="_blank" rel="noopener">Ver Código en GitHub</a>
+        <a href="#caracteristicas" class="btn-secondary">Explorar Capacidades</a>
+      </div>
+
+      <!-- Quick Clone Terminal -->
+      <div class="clone-terminal">
+        <div class="terminal-header">
+          <div class="terminal-dots">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </div>
+          <span>bash / powershell</span>
+        </div>
+        <div class="terminal-body">
+          <code class="terminal-code" id="cmd-text">git clone https://github.com/tu-usuario/lattice-core-isr.git</code>
+          <button class="btn-copy" id="btn-copy" onclick="copyCloneCommand()">Copiar</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Especificaciones Rápidas -->
+  <section class="specs" id="arquitectura">
+    <div class="container">
+      <div class="specs-grid">
+        <div class="spec-item">
+          <div class="num">60 FPS</div>
+          <div class="label">Zero-Latency Pipeline</div>
+        </div>
+        <div class="spec-item">
+          <div class="num">&lt; 160 MB</div>
+          <div class="label">Huella de Memoria RAM</div>
+        </div>
+        <div class="spec-item">
+          <div class="num">38 / 38</div>
+          <div class="label">Tests Unitarios (100% OK)</div>
+        </div>
+        <div class="spec-item">
+          <div class="num">MGRS</div>
+          <div class="label">Geolocalización Militar</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Grid de Características -->
+  <section class="features" id="caracteristicas">
+    <div class="container">
+      <div class="section-header">
+        <h2 class="section-title">Capacidades Operativas de Grado Empresarial</h2>
+        <p class="section-subtitle">Diseñado con arquitectura modular limpia para misiones de reconocimiento crítico.</p>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="card-icon">🤖</div>
+          <h3 class="card-title">Reconocimiento Neuronal YOLOv8</h3>
+          <p class="card-text">
+            Clasificación multiclase de personas, vehículos (autos, camiones, buses, motos, bicis) y equipamiento en tiempo real con overlay táctico detallado y estimación de rumbo.
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="card-icon">🌐</div>
+          <h3 class="card-title">Geolocalización Esférica & MGRS</h3>
+          <p class="card-text">
+            Proyección instantánea de objetivos en coordenadas WGS84, azimut relativo y cuadrícula de precisión militar Military Grid Reference System (MGRS).
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="card-icon">🛡️</div>
+          <h3 class="card-title">Geocercas con Filtro Semántico</h3>
+          <p class="card-text">
+            Zona de exclusión perimetral configurable (15m) con discriminación inteligente de amenazas: solo objetos tácticos críticos disparan alertas.
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="card-icon">🔊</div>
+          <h3 class="card-title">Alertas por Voz Sintetizada</h3>
+          <p class="card-text">
+            Notificaciones audibles inmediatas no bloqueantes con motor pyttsx3 y control de cooldown (5s) para mantener al operador alerta sin saturación acústica.
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="card-icon">🎬</div>
+          <h3 class="card-title">Clips Forenses de Video MP4</h3>
+          <p class="card-text">
+            Buffer rodante continuo en memoria que empaqueta automáticamente clips de video de 5 segundos ante incursiones confirmadas y los almacena en disco.
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="card-icon">📓</div>
+          <h3 class="card-title">Bóveda Local Obsidian Vault</h3>
+          <p class="card-text">
+            Indexación out-of-the-box de reportes Markdown con frontmatter YAML compatible con Dataview, evidencia radiométrica y enlaces multimedia directos.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <p>LATTICE-CORE ISR — Distribuido bajo Licencia Abierta MIT.</p>
+      <p>Diseñado para Mando, Control y Reconocimiento Táctico de Borde.</p>
+    </div>
+  </footer>
+
+  <script>
+    function copyCloneCommand() {
+      const text = document.getElementById("cmd-text").innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById("btn-copy");
+        btn.innerText = "¡Copiado!";
+        setTimeout(() => { btn.innerText = "Copiar"; }, 2000);
+      });
+    }
+  </script>
+</body>
+</html>

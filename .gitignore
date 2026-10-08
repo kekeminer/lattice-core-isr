@@ -1,0 +1,77 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# C extensions
+*.obj
+*.o
+*.lib
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment Variables & Secrets
+.env
+!.env.example
+*.env.local
+
+# Databases & Local Logs
+*.db
+*.sqlite
+*.sqlite3
+logs/
+*.log
+
+# Pytest / Unit Test Caches
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# IDE & Editor Configurations
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+
+# Obsidian Vault Evidence & Local Reports (keep empty dirs via .gitkeep)
+obsidian_vault/evidence/*
+obsidian_vault/recon_reports/*
+!obsidian_vault/evidence/.gitkeep
+!obsidian_vault/recon_reports/.gitkeep
+
+# Neural Models weights cache
+*.pt
+*.onnx
+*.engine
+yolov8*.pt
