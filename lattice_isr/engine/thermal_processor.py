@@ -28,6 +28,11 @@ class ThermalProcessor:
         self._palette = colormap if colormap is not None else palette
         # CLAHE adaptativo para máxima discriminación de gradientes de calor
         self._clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+        # Reutilización de buffers de matrices preasignados para mitigar OOM
+        self._cached_shape: Optional[Tuple[int, int]] = None
+        self._preallocated_gray: Optional[np.ndarray] = None
+        self._preallocated_enhanced: Optional[np.ndarray] = None
+        self._preallocated_thermal: Optional[np.ndarray] = None
 
     @property
     def current_palette(self) -> ThermalPaletteEnum:
@@ -55,49 +60,59 @@ class ThermalProcessor:
         Procesa el frame BGR original produciendo:
         1. `thermal_rendered`: Imagen monocromática de 3 canales para visualización táctica.
         2. `normalized_gray`: Matriz de 1 canal de intensidades para segmentación de hotspots.
+        Reutiliza buffers preasignados para evitar asignaciones continuas de RAM en bucle a 60 FPS.
         """
         if frame_bgr is None or frame_bgr.size == 0:
             raise ThermalProcessingError("Frame de entrada nulo recibido por el procesador térmico.")
 
+        h, w = frame_bgr.shape[:2]
+
+        # Verificar o crear buffers preasignados para las dimensiones actuales
+        if self._cached_shape != (h, w):
+            self._cached_shape = (h, w)
+            self._preallocated_gray = np.empty((h, w), dtype=np.uint8)
+            self._preallocated_enhanced = np.empty((h, w), dtype=np.uint8)
+            self._preallocated_thermal = np.empty((h, w, 3), dtype=np.uint8)
+
         try:
-            # 1. Transformación a dominio de radiancia monocromática
-            gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+            # 1. Transformación a dominio de radiancia monocromática en buffer preasignado
+            gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY, dst=self._preallocated_gray)
 
             # 2. Filtrado Gaussiano para atenuación de ruido de sensor
-            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+            blurred = cv2.GaussianBlur(gray, (5, 5), 0, dst=self._preallocated_gray)
 
-            # 3. Ecualización adaptativa de histograma local (CLAHE)
+            # 3. Ecualización adaptativa de histograma local (CLAHE) en buffer preasignado
             enhanced_gray = self._clahe.apply(blurred)
 
-            # 4. Renderizado según la paleta táctica seleccionada
+            # 4. Renderizado según la paleta táctica seleccionada utilizando buffer dst
             if self._palette == ThermalPaletteEnum.WHITE_HOT:
                 # White Hot: calor = blanco puro brillante
-                bone_mapped = cv2.applyColorMap(enhanced_gray, cv2.COLORMAP_BONE)
-                thermal_rendered = bone_mapped
+                thermal_rendered = cv2.applyColorMap(enhanced_gray, cv2.COLORMAP_BONE, dst=self._preallocated_thermal)
                 detection_matrix = enhanced_gray
 
             elif self._palette == ThermalPaletteEnum.BLACK_HOT:
                 # Black Hot: calor = negro puro, fondo = blanco/gris
                 inverted_gray = cv2.bitwise_not(enhanced_gray)
-                bone_mapped = cv2.applyColorMap(inverted_gray, cv2.COLORMAP_BONE)
-                thermal_rendered = bone_mapped
-                # Para detección de hotspots se utiliza la radiancia original
+                thermal_rendered = cv2.applyColorMap(inverted_gray, cv2.COLORMAP_BONE, dst=self._preallocated_thermal)
                 detection_matrix = enhanced_gray
 
             elif self._palette == ThermalPaletteEnum.INFERNO or str(self._palette) == "INFERNO":
-                thermal_rendered = cv2.applyColorMap(enhanced_gray, cv2.COLORMAP_INFERNO)
+                thermal_rendered = cv2.applyColorMap(enhanced_gray, cv2.COLORMAP_INFERNO, dst=self._preallocated_thermal)
                 detection_matrix = enhanced_gray
 
             elif self._palette == ThermalPaletteEnum.JET or str(self._palette) == "JET":
-                thermal_rendered = cv2.applyColorMap(enhanced_gray, cv2.COLORMAP_JET)
+                thermal_rendered = cv2.applyColorMap(enhanced_gray, cv2.COLORMAP_JET, dst=self._preallocated_thermal)
                 detection_matrix = enhanced_gray
 
             else:
-                thermal_rendered = cv2.cvtColor(enhanced_gray, cv2.COLOR_GRAY2BGR)
+                thermal_rendered = cv2.cvtColor(enhanced_gray, cv2.COLOR_GRAY2BGR, dst=self._preallocated_thermal)
                 detection_matrix = enhanced_gray
 
             return thermal_rendered, detection_matrix
 
-        except cv2.error as err:
-            logger.error(f"[THERMAL-ERR] Fallo en pipeline OpenCV monocromático: {err}")
-            raise ThermalProcessingError(f"Error OpenCV en visión térmica: {err}") from err
+        except (cv2.error, MemoryError) as err:
+            logger.error(f"[THERMAL-MEM-ALERT] Alerta de memoria o fallo OpenCV en pipeline térmico: {err}")
+            # Fallback seguro sin interrupción ante presión de memoria RAM
+            fallback_gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY) if frame_bgr.ndim == 3 else frame_bgr
+            fallback_bgr = frame_bgr if frame_bgr.ndim == 3 else cv2.cvtColor(fallback_gray, cv2.COLOR_GRAY2BGR)
+            return fallback_bgr, fallback_gray

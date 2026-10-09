@@ -46,8 +46,9 @@ class AsyncStreamLoader:
         self._raw_url = settings.STREAM_URL
         self._sanitized_url: Optional[str] = None
 
-        # Buffer circular FIFO con descarte de cuadros más viejos
-        self._buffer: queue.Queue = queue.Queue(maxsize=self._settings.FRAME_BUFFER_SIZE)
+        # Buffer circular FIFO con descarte de cuadros más viejos (tope estricto maxsize=2 para evitar OOM)
+        max_buf = min(getattr(self._settings, "FRAME_BUFFER_SIZE", 2), 2)
+        self._buffer: queue.Queue = queue.Queue(maxsize=max(1, max_buf))
 
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
@@ -127,10 +128,10 @@ class AsyncStreamLoader:
 
     def read(self, timeout: float = 0.05) -> Tuple[bool, Optional[np.ndarray]]:
         """
-        Devuelve siempre el frame MÁS RECIENTE disponible (Zero Latency 60 FPS Strategy).
+        Devuelve siempre el frame MÁS RECIENTE disponible sin copias redundantes en RAM.
         Drena proactivamente cuadros viejos acumulados en la cola para eliminar retardos.
-        Si la red sufre una micro-desconexión, retiene el último frame válido durante 1.5s
-        para evitar parpadeos visuales en la pantalla táctica.
+        Si la red sufre una micro-desconexión, retorna (False, _last_valid_frame) para
+        reutilización directa sin duplicar arrays de NumPy.
         """
         now = time.monotonic()
         try:
@@ -152,10 +153,10 @@ class AsyncStreamLoader:
 
             return True, latest_frame
         except queue.Empty:
-            # Buffer suave: retener último frame válido hasta 1.5s durante micro-cortes
+            # Reutilización sin copia: referencia compartida de lectura
             with self._lock:
                 if self._last_valid_frame is not None and (now - self._last_valid_frame_time) <= self._soft_buffer_seconds:
-                    return True, self._last_valid_frame.copy()
+                    return False, self._last_valid_frame
             return False, None
 
     def _worker_loop(self) -> None:

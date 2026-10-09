@@ -187,7 +187,9 @@ def run_orchestrator(stream_override: Optional[str] = None) -> None:
     inference_cadence = getattr(settings, "INFERENCE_CADENCE", 3)
     tracked_targets: list = []
     active_frame: Optional[np.ndarray] = None
-    target_frame_interval = 1.0 / 60.0  # Exactamente 16.66ms para 60 FPS sostenidos
+    # Estabilizador de FPS en rango 30 - 60 FPS Target (16.6ms min a 33.3ms max)
+    target_frame_interval = 1.0 / 60.0  # 16.6 ms (60 FPS objetivo)
+    max_frame_interval = 1.0 / 30.0     # 33.3 ms (30 FPS suelo de estabilidad)
 
     try:
         while True:
@@ -198,13 +200,14 @@ def run_orchestrator(stream_override: Optional[str] = None) -> None:
             timestamp_id = datetime.now().strftime("%Y%m%d-%H%M%S")
             iso_now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
-            if has_new_frame and raw_frame is not None:
+            if raw_frame is not None:
                 # Ajuste de tamaño táctico estándar para display
                 if raw_frame.shape[1] != settings.FRAME_WIDTH or raw_frame.shape[0] != settings.FRAME_HEIGHT:
                     active_frame = cv2.resize(raw_frame, (settings.FRAME_WIDTH, settings.FRAME_HEIGHT))
                 else:
                     active_frame = raw_frame
-                frame_counter += 1
+                if has_new_frame:
+                    frame_counter += 1
 
             if active_frame is None:
                 waiting_canvas = np.zeros((settings.FRAME_HEIGHT, settings.FRAME_WIDTH + 300, 3), dtype=np.uint8)
@@ -243,46 +246,50 @@ def run_orchestrator(stream_override: Optional[str] = None) -> None:
                 if settings.VIDEO_CLIP_ENABLED and has_new_frame:
                     video_recorder.push_frame(active_frame, stream_loader.fps)
 
-                # 6. Pipeline Térmico Monocromático
+                # 6. Pipeline Térmico Monocromático con buffers preasignados
                 thermal_rendered, detection_gray = thermal_processor.process_frame(active_frame)
 
                 # 7. Submuestreo Asíncrono de Inferencia (Cadencia cada 3 fotogramas de cámara para 60 FPS sostenidos)
                 is_inference_turn = (frame_counter == 1) or (frame_counter % inference_cadence == 0)
 
-                if has_new_frame and (is_inference_turn or len(tracked_targets) == 0):
-                    inf_w = settings.INFERENCE_WIDTH
-                    inf_h = settings.INFERENCE_HEIGHT
+                inf_w = settings.INFERENCE_WIDTH
+                inf_h = settings.INFERENCE_HEIGHT
+
+                if has_new_frame and is_inference_turn:
                     inf_rgb = cv2.resize(active_frame, (inf_w, inf_h), interpolation=cv2.INTER_LINEAR)
                     inf_gray = cv2.resize(detection_gray, (inf_w, inf_h), interpolation=cv2.INTER_LINEAR)
-
-                    # Detección e Identificación Multiclase Neuronal YOLOv8 Asíncrona
+                    # Enviar frame al worker asíncrono de YOLOv8
                     raw_inf_detections = object_detector.detect_objects(
                         frame_rgb=inf_rgb,
                         base_timestamp_id=timestamp_id,
                         gray_fallback=inf_gray,
                         async_mode=True
                     )
+                else:
+                    # En frames intermedios, recuperar inmediatamente las detecciones más recientes del worker
+                    raw_inf_detections = object_detector.get_latest_detections()
 
-                    # Reescalar coordenadas de detección al tamaño real de visualización
-                    scale_x = settings.FRAME_WIDTH / float(inf_w)
-                    scale_y = settings.FRAME_HEIGHT / float(inf_h)
-                    raw_detections = []
-                    for d in raw_inf_detections:
-                        scaled_d = d.model_copy(update={
-                            "bbox_x": int(d.bbox_x * scale_x),
-                            "bbox_y": int(d.bbox_y * scale_y),
-                            "bbox_w": int(d.bbox_w * scale_x),
-                            "bbox_h": int(d.bbox_h * scale_y),
-                            "centroid_x": int(d.centroid_x * scale_x),
-                            "centroid_y": int(d.centroid_y * scale_y),
-                            "area_px": int(d.area_px * (scale_x * scale_y))
-                        })
-                        raw_detections.append(scaled_d)
+                # Reescalar coordenadas de detección al tamaño real de visualización
+                scale_x = settings.FRAME_WIDTH / float(inf_w)
+                scale_y = settings.FRAME_HEIGHT / float(inf_h)
+                raw_detections = []
+                for d in raw_inf_detections:
+                    scaled_d = d.model_copy(update={
+                        "bbox_x": int(d.bbox_x * scale_x),
+                        "bbox_y": int(d.bbox_y * scale_y),
+                        "bbox_w": int(d.bbox_w * scale_x),
+                        "bbox_h": int(d.bbox_h * scale_y),
+                        "centroid_x": int(d.centroid_x * scale_x),
+                        "centroid_y": int(d.centroid_y * scale_y),
+                        "area_px": int(d.area_px * (scale_x * scale_y))
+                    })
+                    raw_detections.append(scaled_d)
 
-                    # 8. Seguimiento Continuo de Objetivos (Centroid Tracking & Motion Vectors)
+                # 8. Seguimiento Continuo de Objetivos (Centroid Tracking & Motion Vectors)
+                if raw_detections:
                     tracked_targets = target_tracker.update(raw_detections, now_mono)
                 else:
-                    # Interpolación cinemática continua (garantiza movimiento suave a 60 FPS aunque la cámara entregue 30 FPS)
+                    # Interpolación cinemática continua cuando no hay nuevas detecciones en el tick
                     tracked_targets = target_tracker.extrapolate_kinematics(now_mono)
 
                 # 9. Estimación Geoespacial (GPS, MGRS, UTM) e Inventario Semántico de Terreno (m²)
@@ -502,10 +509,15 @@ def run_orchestrator(stream_override: Optional[str] = None) -> None:
                 logger.error(f"[PIPELINE-WARN] Frame omitido: {pipe_err}")
                 continue
 
-            # 16. Control de Teclado del Operador y Temporizador de 60 FPS
+            # 16. Control de Teclado del Operador y Temporizador de 30-60 FPS
             loop_duration = time.perf_counter() - loop_start
+            # Si el procesamiento fue ultra rápido (< 16.6ms), esperar para no exceder 60 FPS
+            # Si fue más lento, asegurar al menos 1ms sin exceder 33.3ms (30 FPS suelo)
             sleep_sec = target_frame_interval - loop_duration
-            wait_key_ms = max(1, int(sleep_sec * 1000.0)) if sleep_sec > 0.001 else 1
+            if sleep_sec > 0.001:
+                wait_key_ms = max(1, int(sleep_sec * 1000.0))
+            else:
+                wait_key_ms = 1
 
             key = cv2.waitKey(wait_key_ms) & 0xFF
 
